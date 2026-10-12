@@ -1,0 +1,63 @@
+/* shared by the interviewee and interviewer pages */
+:root {
+  color-scheme: light dark;
+  --bg: #f6f5f2; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6a66; --line: #dddad3;
+  --accent: #2f5d50; --accent-text: #ffffff; --danger: #a8322d; --ok: #2f6d3a;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #161615; --panel: #201f1d; --text: #ecebe7; --muted: #a09e98; --line: #34322e;
+          --accent: #6fae9c; --accent-text: #0c1512; --danger: #e0716b; --ok: #7cc28a; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, sans-serif; }
+main { max-width: 620px; margin: 0 auto; padding: 2rem 16px 4rem; }
+main.wide { max-width: 1100px; }
+h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.1rem; margin: 0 0 .75rem; }
+p { margin: .4rem 0; }
+.lead { color: var(--muted); margin-bottom: 1.5rem; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 1.1rem 1.2rem; margin: 0 0 1rem; }
+.big { font-size: 2.6rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+button { font: inherit; border-radius: 7px; padding: .5rem 1rem; border: 1px solid var(--line);
+         background: var(--panel); color: var(--text); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+button.danger { color: var(--danger); border-color: var(--danger); }
+button:disabled { opacity: .45; cursor: default; }
+input[type=password] { font: inherit; padding: .45rem .6rem; border: 1px solid var(--line); border-radius: 7px;
+                       background: var(--bg); color: var(--text); width: 16rem; max-width: 100%; }
+label.check { display: inline-flex; gap: .4rem; align-items: center; }
+.setting { display: grid; grid-template-columns: 9rem 1fr 3.5rem; align-items: center; gap: .7rem; margin: .45rem 0; }
+.setting output { font-variant-numeric: tabular-nums; text-align: right; }
+.setting input[type=range] { width: 100%; }
+@media (max-width: 440px) { .setting { grid-template-columns: 6.5rem 1fr 3rem; } }
+.setting.wide { grid-template-columns: 9rem 1fr; }
+@media (max-width: 440px) { .setting.wide { grid-template-columns: 4.5rem 1fr; } }
+.notice { border-left: 3px solid var(--accent); padding: .3rem .8rem; margin: .6rem 0; }
+.error { color: var(--danger); min-height: 1.5em; }
+.dot { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; background: var(--ok); margin-right: .4rem; }
+video { width: 100%; background: #000; border-radius: 8px; display: block; }
+[hidden] { display: none !important; }
+.phrase { font-size: 1.15rem; font-style: italic; margin: .6rem 0 .9rem; }
+.dot.rec { background: var(--danger); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .dot.rec { animation: none; } }
+select { font: inherit; padding: .4rem .5rem; border: 1px solid var(--line); border-radius: 7px;
+         background: var(--bg); color: var(--text); width: 100%; min-width: 0; }
+.checks { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; margin: .6rem 0 .3rem; }
+.meter { height: .55rem; border-radius: 4px; background: var(--line); overflow: hidden; }
+.meter > div { height: 100%; width: 0; background: var(--accent); transition: width 60ms linear; }
+@media (prefers-reduced-motion: reduce) { .meter > div { transition: none; } }
+/* voice options */
+.options { display: grid; gap: .45rem; margin: .7rem 0 .5rem; }
+.option { display: flex; gap: .65rem; align-items: flex-start; padding: .6rem .75rem; border: 1px solid var(--line);
+          border-radius: 8px; cursor: pointer; }
+.option input { margin-top: .3rem; accent-color: var(--accent); }
+.option:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.option:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.option .desc { display: block; font-size: .92rem; }
+.tag { display: inline-block; font-size: .78rem; padding: 0 .45rem; border-radius: 999px; border: 1px solid var(--line);
+       color: var(--muted); vertical-align: 1px; }
+.tag.good { border-color: var(--ok); color: var(--ok); }
+.tag.warn { border-color: var(--danger); color: var(--danger); }

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Interviewer</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main class="wide">
+  <h1>Interviewer</h1>
+  <p class="lead">Interviewees' voices are disguised; yours is not.</p>
+
+  <!-- 1. access key -->
+  <section id="login" class="panel">
+    <h2>Sign in</h2>
+    <form id="loginForm" class="row">
+      <input type="password" id="key" placeholder="Access key" autocomplete="current-password" required>
+      <button class="primary" type="submit">Continue</button>
+    </form>
+  </section>
+
+  <!-- 2. microphone -->
+  <section id="micStep" class="panel" hidden>
+    <h2>Microphone</h2>
+    <p>Your browser will ask to use your microphone.</p>
+    <div class="row" style="margin-top: .6rem"><button id="startMic" class="primary">Turn on microphone</button></div>
+  </section>
+
+  <!-- 3. the queue -->
+  <section id="lobby" class="panel" hidden>
+    <p class="muted">Waiting</p>
+    <div class="big" id="queueLength">0</div>
+    <div class="row" style="margin-top: .8rem">
+      <button id="next" class="primary" disabled>Next interviewee</button>
+    </div>
+  </section>
+
+  <!-- 4. the interview -->
+  <section id="interview" hidden>
+    <div class="panel">
+      <p><span class="dot"></span><strong>Interviewing <code id="who"></code></strong>
+        <span class="muted" id="waitingDuring"></span></p>
+      <div class="row" style="margin-top: .8rem">
+        <label class="check"><input type="checkbox" id="mute"> Mute</label>
+        <button id="hangup" class="danger">End interview</button>
+      </div>
+    </div>
+    <div class="panel" id="screenPanel" hidden>
+      <div class="row" style="justify-content: space-between; margin-bottom: .6rem">
+        <h2 style="margin: 0">Interviewee's screen</h2>
+        <button id="fullscreen">Full screen</button>
+      </div>
+      <video id="screenVideo" autoplay playsinline muted></video>
+    </div>
+  </section>
+
+  <p class="error" id="error"></p>
+  <audio id="remoteAudio" autoplay></audio>
+</main>
+
+<script src="call-client.js" defer></script>
+<script>
+
+
+  const $ = (id) => document.getElementById(id);
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const showError = (msg) => { $('error').textContent = msg || ''; };
+  let client = null;
+  let waiting = 0;
+  let inInterview = false;
+
+  function show(step) {
+    for (const s of ['login', 'micStep', 'lobby', 'interview']) $(s).hidden = s !== step;
+  }
+  const updateNext = () => { $('next').disabled = inInterview || waiting === 0; };
+
+  // ---- sign in: the key goes in the first message, never in the URL ----
+  $('loginForm').onsubmit = async (e) => {
+    e.preventDefault();
+    showError('');
+    client = new CallClient(`${proto}//${location.host}/signal`, { role: 'interviewer', key: $('key').value });
+    try {
+      await client.connect();
+    } catch (err) {
+      showError(err.message === 'wrong access key' ? 'That access key is not right.' : `Could not connect: ${err.message}`);
+      return;
+    }
+    $('key').value = '';
+    wire();
+    show('micStep');
+  };
+
+  $('startMic').onclick = async () => {
+    $('startMic').disabled = true;
+    try {
+      await client.startAudio();
+      $('remoteAudio').srcObject = client.remoteStream;
+      $('remoteAudio').play().catch(() => {});
+      show('lobby');
+      updateNext();
+    } catch (err) {
+      showError(err.name === 'NotAllowedError'
+        ? 'Microphone access was blocked. Allow it in your browser and try again.'
+        : `Could not start: ${err.message}`);
+      $('startMic').disabled = false;
+    }
+  };
+
+  function wire() {
+    client.addEventListener('queue', (e) => {
+      waiting = e.detail.length;
+      $('queueLength').textContent = waiting;
+      $('waitingDuring').textContent = waiting ? `· ${waiting} waiting` : '';
+      updateNext();
+    });
+    client.addEventListener('connected', (e) => {
+      inInterview = true;
+      $('who').textContent = e.detail.peer;
+      $('mute').checked = false;
+      client.setMuted(false);
+      show('interview');
+      updateNext();
+    });
+    client.addEventListener('ended', (e) => {
+      inInterview = false;
+      $('screenPanel').hidden = true;
+      $('screenVideo').srcObject = null;
+      if (e.detail.reason !== 'you hung up') showError(`The interviewee left (${e.detail.reason}).`);
+      show('lobby');
+      updateNext();
+    });
+    client.addEventListener('screen', (e) => {
+      $('screenVideo').srcObject = e.detail.stream;
+      $('screenPanel').hidden = false;
+    });
+    client.addEventListener('screen-ended', () => {
+      $('screenVideo').srcObject = null;
+      $('screenPanel').hidden = true;
+    });
+    client.addEventListener('error', (e) => { showError(e.detail.message); updateNext(); });
+    client.addEventListener('closed', () => showError('Lost the connection to the server. Reload the page.'));
+  }
+
+  $('next').onclick = () => { showError(''); $('next').disabled = true; client.next(); };
+  $('hangup').onclick = () => client.hangup();
+  $('mute').onchange = (e) => client.setMuted(e.target.checked);
+  $('fullscreen').onclick = () => $('screenVideo').requestFullscreen?.();
+</script>
+</body>
+</html>

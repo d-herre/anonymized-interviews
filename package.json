@@ -1,0 +1,13 @@
+{
+  "name": "rt-lpc-call",
+    "version": "2.0.0",
+    "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "media": "RT_LPC_CMD=\"media/rt_lpc --stdio --srate{rate} --control-fd={control_fd}\" python3 media/media_server.py"
+  },
+  "dependencies": {
+    "express": "^5.3.0",
+    "ws": "^8.22.0"
+  }
+}

@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Anonymous interview</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <h1>Anonymous interview</h1>
+  <p class="lead">Your voice is disguised before the interviewer hears it, and they never see you.
+    Headphones are recommended.</p>
+
+  <!-- 1. microphone off -->
+  <section id="intro" class="panel">
+    <h2>Turn on your microphone</h2>
+    <p>Your browser will ask to use your microphone. Then you can set up how your voice is
+      disguised and listen to it, and join the queue when you're happy with it.</p>
+    <div class="row" style="margin-top: .8rem">
+      <button id="startMic" class="primary" disabled>Turn on microphone</button>
+    </div>
+  </section>
+
+  <!-- 2. getting ready, not in the queue yet (also after leaving it or an interview) -->
+  <section id="ready" class="panel" hidden>
+    <p class="notice" id="readyNote" hidden></p>
+    <h2>Get ready</h2>
+    <p>Read the sentence below once to get your voice options, pick one, and turn on "Hear my
+      disguised voice" to listen to it. Join the queue when you're happy with how you sound; you can
+      keep switching voices while you wait.</p>
+    <div class="row" style="margin-top: .8rem">
+      <button id="join" class="primary">Join the queue</button>
+    </div>
+  </section>
+
+  <!-- 3. waiting in the queue -->
+  <section id="waiting" hidden>
+    <div class="panel">
+      <p class="muted">Your place in line</p>
+      <div class="big" id="position">–</div>
+      <p class="muted" id="queueNote">Waiting for an interviewer…</p>
+      <p class="notice" id="requeuedNote" hidden>The interviewer disconnected. You're back at the front of the line.</p>
+      <div class="row" style="margin-top: .6rem">
+        <button id="leaveQueue">Leave the queue</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. in the interview -->
+  <section id="interview" hidden>
+    <div class="panel">
+      <p><span class="dot"></span><strong>You're in the interview.</strong></p>
+      <p class="muted">The interviewer hears your disguised voice.</p>
+      <div class="row" style="margin-top: .8rem">
+        <label class="check"><input type="checkbox" id="mute"> Mute</label>
+        <button id="shareScreen">Share my screen</button>
+        <button id="stopShare" hidden>Stop sharing</button>
+        <button id="hangup" class="danger">Leave the interview</button>
+      </div>
+      <p class="muted" id="shareStatus"></p>
+    </div>
+  </section>
+
+  <!-- the microphone: at every step -->
+  <section id="micPanel" class="panel">
+    <h2>Microphone</h2>
+    <label class="setting wide">
+      <span>Device</span>
+      <select id="micDevice"><option value="">Default microphone</option></select>
+    </label>
+    <div class="setting wide" id="micLevelRow" hidden>
+      <span>Level</span>
+      <div class="meter" aria-hidden="true"><div id="micLevel"></div></div>
+    </div>
+    <p class="muted" id="micDeviceHint">Turn on your microphone to see all of your devices.</p>
+    <div class="checks">
+      <label class="check"><input type="checkbox" id="echoCancellation" checked> Echo cancellation</label>
+      <label class="check"><input type="checkbox" id="noiseSuppression" checked> Noise suppression</label>
+      <label class="check"><input type="checkbox" id="autoGainControl" checked> Automatic gain control</label>
+    </div>
+    <p class="muted">Keep echo cancellation on unless you're wearing headphones: without it, the
+      interviewer's voice can reach your microphone and they'll hear an echo.</p>
+    <p class="notice" id="micNote" hidden></p>
+  </section>
+
+  <!-- choosing a voice (before joining and while waiting) -->
+  <section id="calibPanel" class="panel" hidden>
+    <h2>Choose a voice</h2>
+    <div id="calibIdle">
+      <p>Read this sentence aloud once, in your normal voice. Then you can choose between several
+        voices, each worked out to suit yours, and we'll suggest one:</p>
+      <p class="phrase" id="phrase"></p>
+      <p class="notice" id="calibLost" hidden></p>
+      <div class="row"><button id="calibStart" class="primary">Start recording</button></div>
+    </div>
+    <div id="calibRecording" hidden>
+      <p class="phrase" id="phraseRec"></p>
+      <p><span class="dot rec"></span><strong>Recording</strong> <span class="muted" id="calibTime"></span></p>
+      <div class="row">
+        <button id="calibStop" class="primary">Done</button>
+        <button id="calibCancel">Cancel</button>
+      </div>
+    </div>
+    <p id="calibAnalyzing" class="muted" hidden>Working out your voices…</p>
+    <div id="calibDone" hidden>
+      <p class="muted" id="calibMeasured"></p>
+      <div id="voiceOptions" class="options" role="radiogroup" aria-label="Voice"></div>
+      <p class="muted" id="optionNote"></p>
+      <div class="row"><button id="calibAgain">Record again</button></div>
+    </div>
+    <div id="calibFailed" hidden>
+      <p class="error" id="calibError"></p>
+      <div class="row"><button id="calibRetry">Try again</button></div>
+    </div>
+  </section>
+
+  <!-- the disguise: before joining and while waiting (all settings), during the interview (volume only) -->
+  <section id="voicePanel" class="panel" hidden>
+    <h2>Your voice disguise</h2>
+    <p class="muted" id="voiceHelp"></p>
+    <label class="check" id="monitorLabel"><input type="checkbox" id="monitor"> Hear my disguised voice (use headphones)</label>
+    <div id="voiceControls" style="margin-top: .6rem"></div>
+    <p class="error" id="voiceWarning"></p>
+  </section>
+
+  <p class="error" id="error"></p>
+  <audio id="remoteAudio" autoplay></audio>
+</main>
+
+<script type="module">
+  import { CallClient } from './call-client.js';
+
+  const $ = (id) => document.getElementById(id);
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const client = new CallClient(`${proto}//${location.host}/signal`, { role: 'interviewee' });
+  const controls = {};       // voice setting name -> { input, output, spec, row }
+
+  const HELP_PREPARING = "Choose a voice above, or fine-tune pitch and formants here until you're " +
+    "happy with how you sound. Your voice must stay disguised, so pitch and formant can't both be close to 1.";
+  const HELP_INTERVIEW = 'Your disguise is fixed for the interview. You can still change your volume.';
+
+  // states: 'intro' (microphone off), 'ready' (getting ready, not queued),
+  // 'waiting' (in the queue), 'interview'
+  function show(state) {
+    for (const s of ['intro', 'ready', 'waiting', 'interview']) $(s).hidden = s !== state;
+    const interview = state === 'interview';
+    const preparing = state === 'ready' || state === 'waiting';
+    $('voicePanel').hidden = !(preparing || interview);
+    $('calibPanel').hidden = !preparing || !client.calibration;
+    // during the interview only the volume can change, and trying the voice
+    // out is for before it
+    for (const [name, c] of Object.entries(controls)) c.row.hidden = interview && name !== 'gain';
+    $('monitorLabel').hidden = interview;
+    $('voiceHelp').textContent = interview ? HELP_INTERVIEW : HELP_PREPARING;
+    $('voiceWarning').textContent = '';
+    if (!preparing && $('monitor').checked) {
+      $('monitor').checked = false;
+      client.monitor(false);
+    }
+  }
+  const showError = (msg) => { $('error').textContent = msg || ''; };
+  // back to getting ready, with a note saying why
+  function showReady(note) {
+    $('readyNote').textContent = note || '';
+    $('readyNote').hidden = !note;
+    show('ready');
+  }
+
+  // ---- starting, joining, leaving ----
+  $('startMic').onclick = async () => {
+    $('startMic').disabled = true;
+    showError('');
+    try {
+      await client.startAudio();            // not in the queue yet
+      $('remoteAudio').srcObject = client.remoteStream;
+      $('remoteAudio').play().catch(() => {});
+      showReady();
+    } catch (err) {
+      showError(err.name === 'NotAllowedError'
+        ? 'Microphone access was blocked. Allow it in your browser and try again.'
+        : `Could not start: ${err.message}`);
+      $('startMic').disabled = false;
+    }
+  };
+  $('join').onclick = () => {
+    showError('');
+    $('requeuedNote').hidden = true;
+    $('position').textContent = '–';
+    $('queueNote').textContent = 'Waiting for an interviewer…';
+    client.join();
+    show('waiting');
+  };
+  $('leaveQueue').onclick = () => {
+    client.leave();
+    showReady("You left the queue. Join again whenever you're ready.");
+  };
+
+  client.addEventListener('queue', (e) => {
+    const { position, length } = e.detail;
+    if (position == null) return;
+    $('position').textContent = position === 1 ? "You're next" : `#${position}`;
+    $('queueNote').textContent = length > 1
+      ? `${length} people are waiting. An interviewer will start your interview.`
+      : 'An interviewer will start your interview.';
+  });
+
+  // ---- the interview ----
+  client.addEventListener('connected', () => {
+    $('requeuedNote').hidden = true;
+    $('mute').checked = false;
+    client.setMuted(false);
+    show('interview');
+  });
+  client.addEventListener('ended', (e) => {
+    if (e.detail.requeued) {               // the interviewer dropped out
+      $('requeuedNote').hidden = false;
+      show('waiting');
+      return;
+    }
+    showReady(e.detail.reason === 'you hung up'
+      ? 'You left the interview. You can join the queue again whenever you like.'
+      : 'The interview has ended. You can join the queue again whenever you like.');
+  });
+  $('hangup').onclick = () => client.hangup();
+  $('mute').onchange = (e) => client.setMuted(e.target.checked);
+
+  // screen sharing (to the interviewer only)
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    $('shareScreen').disabled = true;
+    $('shareStatus').textContent = "This browser can't share its screen (most phones can't).";
+  }
+  $('shareScreen').onclick = async () => {
+    try { await client.startScreenShare(); }
+    catch (err) { if (err.name !== 'NotAllowedError') showError(err.message); }
+  };
+  $('stopShare').onclick = () => client.stopScreenShare();
+  client.addEventListener('screen-sharing', (e) => {
+    $('shareScreen').hidden = e.detail.sharing;
+    $('stopShare').hidden = !e.detail.sharing;
+    $('shareStatus').textContent = e.detail.sharing ? 'The interviewer can see your screen.' : '';
+  });
+
+  // ---- voice disguise controls, built from the server's definition ----
+  function showValue(name, value) {
+    const c = controls[name];
+    if (!c.output) return;
+    c.output.textContent = c.spec.type === 'int' ? value
+      : name === 'gain' ? `${value > 0 ? '+' : ''}${value}` : Number(value).toFixed(2);
+  }
+  function change(name, value) {
+    // warn instead of sending something the server would refuse
+    if (!client.isDisguised({ [name]: value })) {
+      $('voiceWarning').textContent = 'Too close to your real voice: move the formant or pitch factor further from 1.';
+      return;
+    }
+    $('voiceWarning').textContent = '';
+    client.setVoice({ [name]: value });
+  }
+  function buildVoiceControls(spec, voice) {
+    for (const [name, sp] of Object.entries(spec)) {
+      const row = document.createElement('label');
+      row.className = 'setting';
+      row.append(Object.assign(document.createElement('span'), { textContent: sp.label }));
+      let input, output = null;
+      if (sp.type === 'number' || sp.type === 'int') {
+        input = Object.assign(document.createElement('input'),
+          { type: 'range', min: sp.min, max: sp.max, step: sp.step, value: voice[name] });
+        output = document.createElement('output');
+        input.oninput = () => { showValue(name, Number(input.value)); change(name, Number(input.value)); };
+      } else if (sp.type === 'choice') {
+        input = document.createElement('select');
+        for (const o of sp.options) input.append(new Option(o, o));
+        input.value = voice[name];
+        input.onchange = () => change(name, input.value);
+      } else {
+        input = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !!voice[name] });
+        input.onchange = () => change(name, input.checked);
+      }
+      row.append(input, output || document.createElement('span'));
+      $('voiceControls').append(row);
+      controls[name] = { input, output, spec: sp, row };
+      showValue(name, voice[name]);
+    }
+  }
+  // the server's confirmed values; don't fight a control being dragged
+  client.addEventListener('voice', (e) => {
+    for (const [name, c] of Object.entries(controls)) {
+      const v = e.detail.voice[name];
+      if (v === undefined || c.input === document.activeElement) continue;
+      if (c.input.type === 'checkbox') c.input.checked = !!v; else c.input.value = v;
+      showValue(name, v);
+    }
+  });
+  $('monitor').onchange = (e) => client.monitor(e.target.checked);
+
+  // ---- choosing a voice ----
+  // Recording the phrase once gives the options; picking one has the server
+  // work out the settings for it from the measured voice and apply them.
+  const TAGS = {
+    suggested: ['Suggested', 'tag good'],
+    close: ['Close to your voice', 'tag'],
+    strained: ['May be hard to understand', 'tag warn'],
+  };
+  let calibTimer = null, options = null;   // options: the last 'done' result's voices
+  function calibState(state) {
+    for (const [id, st] of [['calibIdle', 'idle'], ['calibRecording', 'recording'],
+                            ['calibAnalyzing', 'analyzing'], ['calibDone', 'done'], ['calibFailed', 'failed']])
+      $(id).hidden = st !== state;
+    if (state !== 'recording') { clearInterval(calibTimer); calibTimer = null; }
+  }
+  const factors = (s) => `pitch × ${s.pitch.toFixed(2)} · formants × ${s.formant.toFixed(2)}`;
+  function renderOptions() {
+    const box = $('voiceOptions');
+    box.replaceChildren();
+    for (const o of options) {
+      const row = document.createElement('label');
+      row.className = 'option';
+      const radio = Object.assign(document.createElement('input'),
+        { type: 'radio', name: 'voiceOption', value: o.id, checked: o.id === client.voiceOption });
+      radio.onchange = () => { showError(''); client.chooseVoice(o.id); };
+      const text = document.createElement('span');
+      const title = document.createElement('strong');
+      title.textContent = o.name;
+      text.append(title);
+      for (const t of o.tags) {
+        const [label, cls] = TAGS[t] || [t, 'tag'];
+        text.append(' ', Object.assign(document.createElement('span'), { className: cls, textContent: label }));
+      }
+      if (o.description) text.append(Object.assign(document.createElement('span'),
+        { className: 'muted desc', textContent: o.description }));
+      text.append(Object.assign(document.createElement('span'),
+        { className: 'muted desc', textContent: factors(o.settings) }));
+      row.append(radio, text);
+      box.append(row);
+    }
+    showOptionNote();
+  }
+  function showOptionNote() {
+    const o = options?.find((v) => v.id === client.voiceOption);
+    $('optionNote').textContent = !o
+      ? 'Your own settings are in use (changed below). Pick a voice to go back to one.'
+      : o.adjusted
+        ? `“${o.name}” is close to your own voice, so its pitch was moved a little further to keep you disguised.`
+        : 'Turn on “Hear my disguised voice” below to listen, and try the others.';
+  }
+  $('calibStart').onclick = () => {
+    $('calibLost').hidden = true;
+    $('calibStart').disabled = $('calibAgain').disabled = true;
+    client.calibrate('start');
+  };
+  $('calibRetry').onclick = $('calibAgain').onclick = $('calibStart').onclick;
+  $('calibStop').onclick = () => client.calibrate('stop');
+  $('calibCancel').onclick = () => client.calibrate('cancel');
+  client.addEventListener('calibration', (e) => {
+    const d = e.detail;
+    $('calibStart').disabled = $('calibAgain').disabled = false;
+    if (d.state === 'recording') {
+      calibState('recording');
+      let left = d.maxSeconds;
+      $('calibTime').textContent = `(stops by itself in ${left} s)`;
+      calibTimer = setInterval(() => {
+        left = Math.max(0, left - 1);
+        $('calibTime').textContent = `(stops by itself in ${left} s)`;
+      }, 1000);
+    } else if (d.state === 'analyzing') {
+      calibState('analyzing');
+    } else if (d.state === 'done') {
+      options = d.voices;
+      $('calibMeasured').textContent = `Your voice: average pitch about ${Math.round(d.measured.f0)} Hz. ` +
+        (d.suggested ? "We've switched you to the suggested voice." : '');
+      renderOptions();
+      calibState('done');
+    } else if (d.state === 'failed') {
+      $('calibError').textContent = d.message;
+      calibState('failed');
+    } else {
+      // cancelled: back to the options from before, if there were any
+      calibState(options ? 'done' : 'idle');
+    }
+  });
+  // the settings for an option are worked out afresh each time it's picked
+  client.addEventListener('voiceOption', (e) => {
+    const o = options?.find((v) => v.id === e.detail.id);
+    if (!o) return;
+    o.settings = e.detail.settings;
+    o.adjusted = e.detail.adjusted;
+    renderOptions();
+  });
+  client.addEventListener('voice', () => {
+    if (!options) return;
+    for (const r of $('voiceOptions').querySelectorAll('input')) r.checked = r.value === client.voiceOption;
+    showOptionNote();
+  });
+  client.addEventListener('recalibrate', (e) => {
+    options = null;
+    $('calibLost').textContent = e.detail.message;
+    $('calibLost').hidden = false;
+    calibState('idle');
+  });
+
+  // ---- the microphone: device, processing, level ----
+  // The choices are remembered in this browser (if it allows storage).
+  const MIC_KEY = 'interview.microphone';
+  const PROCESSING = ['echoCancellation', 'noiseSuppression', 'autoGainControl'];
+  const PROCESSING_NAMES = { echoCancellation: 'echo cancellation', noiseSuppression: 'noise suppression',
+                             autoGainControl: 'automatic gain control' };
+  try {
+    const saved = JSON.parse(localStorage.getItem(MIC_KEY) || 'null');
+    if (saved && typeof saved === 'object') {
+      const o = {};
+      if (typeof saved.deviceId === 'string') o.deviceId = saved.deviceId;
+      for (const k of PROCESSING) if (typeof saved[k] === 'boolean') o[k] = saved[k];
+      client.audioOptions = { ...client.audioOptions, ...o };
+    }
+  } catch { /* no storage: defaults */ }
+  function saveMicChoices() {
+    try { localStorage.setItem(MIC_KEY, JSON.stringify(client.audioOptions)); } catch { /* fine */ }
+  }
+  for (const k of PROCESSING) $(k).checked = client.audioOptions[k];
+
+  async function refreshDevices() {
+    const inputs = (await CallClient.audioInputs())
+      // Chrome's 'default' and 'communications' entries duplicate real ones
+      .filter((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications');
+    const sel = $('micDevice');
+    sel.replaceChildren(new Option('Default microphone', ''));
+    inputs.forEach((d, i) => sel.append(new Option(d.label || `Microphone ${i + 1}`, d.deviceId)));
+    const want = client.audioOptions.deviceId;
+    sel.value = [...sel.options].some((o) => o.value === want) ? want : '';
+    // names only show once the browser has given microphone access
+    $('micDeviceHint').hidden = inputs.some((d) => d.label);
+    return inputs;
+  }
+
+  function setMicBusy(busy) {
+    for (const id of ['micDevice', ...PROCESSING]) $(id).disabled = busy;
+  }
+  async function changeMicrophone(changes) {
+    setMicBusy(true);
+    try {
+      await client.setAudioInput(changes);
+      saveMicChoices();
+    } catch (err) {
+      showError(`Could not switch the microphone: ${err.message}`);
+    } finally {
+      // show what's actually in use
+      $('micDevice').value = client.audioOptions.deviceId;
+      for (const k of PROCESSING) $(k).checked = client.audioOptions[k];
+      setMicBusy(false);
+    }
+  }
+  $('micDevice').onchange = () => changeMicrophone({ deviceId: $('micDevice').value });
+  for (const k of PROCESSING) $(k).onchange = () => changeMicrophone({ [k]: $(k).checked });
+
+  // the microphone in use changed: the device list (names appear after the
+  // first permission), the level meter, and anything the browser didn't do
+  client.addEventListener('microphone', async (e) => {
+    const { requested, applied, stream } = e.detail;
+    await refreshDevices();
+    const ignored = PROCESSING.filter((k) => applied[k] !== undefined && applied[k] !== requested[k]);
+    $('micNote').textContent = ignored.length
+      ? `Your browser didn't ${ignored.map((k) => `turn ${requested[k] ? 'on' : 'off'} ${PROCESSING_NAMES[k]}`).join(' or ')} for this microphone.`
+      : '';
+    $('micNote').hidden = !ignored.length;
+    meter.attach(stream);
+  });
+
+  // a microphone unplugged (or plugged in): keep the list current, and if
+  // the one in use is gone, go back to the default
+  navigator.mediaDevices?.addEventListener?.('devicechange', async () => {
+    const inputs = await refreshDevices();
+    const id = client.audioOptions.deviceId;
+    if (id && client.micStream && !inputs.some((d) => d.deviceId === id)) {
+      await changeMicrophone({ deviceId: '' });
+      $('micNote').textContent = 'Your microphone was disconnected, so the default one is in use.';
+      $('micNote').hidden = false;
+    }
+  });
+
+  // input level, so the right microphone is easy to pick
+  const meter = {
+    ctx: null, source: null, analyser: null, data: null, running: false,
+    attach(stream) {
+      if (!stream) return;
+      try {
+        this.ctx ??= new AudioContext();
+        this.ctx.resume?.().catch(() => {});
+        if (!this.analyser) {
+          this.analyser = this.ctx.createAnalyser();
+          this.analyser.fftSize = 1024;
+          this.data = new Float32Array(this.analyser.fftSize);
+        }
+        this.source?.disconnect();
+        this.source = this.ctx.createMediaStreamSource(stream);
+        this.source.connect(this.analyser);
+      } catch {
+        return;                            // no Web Audio: no meter
+      }
+      $('micLevelRow').hidden = false;
+      if (!this.running) { this.running = true; requestAnimationFrame(() => this.draw()); }
+    },
+    draw() {
+      this.analyser.getFloatTimeDomainData(this.data);
+      let sum = 0;
+      for (const v of this.data) sum += v * v;
+      const db = 10 * Math.log10(sum / this.data.length + 1e-12);
+      // -60 dBFS .. 0 dBFS across the bar
+      $('micLevel').style.width = `${Math.max(0, Math.min(1, (db + 60) / 60)) * 100}%`;
+      requestAnimationFrame(() => this.draw());
+    },
+  };
+  refreshDevices();
+
+  client.addEventListener('error', (e) => showError(e.detail.message));
+  client.addEventListener('closed', () => showError('Lost the connection to the server. Reload the page to join again.'));
+
+  client.connect().then(() => {
+    buildVoiceControls(client.voiceSpec, client.voice);
+    if (client.calibration) {
+      $('phrase').textContent = $('phraseRec').textContent = `“${client.calibration.phrase}”`;
+      calibState('idle');
+    }
+    $('startMic').disabled = false;
+    show('intro');
+  }).catch((err) => showError(`Could not reach the server: ${err.message}`));
+</script>
+</body>
+</html>
